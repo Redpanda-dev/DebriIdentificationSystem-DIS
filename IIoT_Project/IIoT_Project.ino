@@ -132,6 +132,9 @@ void loop() {
   if(toReconnect) {
     connect();
   }
+  if(device.connected()){
+    sendData(laserDist, ultrasonicDist);
+  }
   
   device.loop(); // Keep Losant and WiFi connection alive
   
