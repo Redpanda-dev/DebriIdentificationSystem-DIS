@@ -1,34 +1,19 @@
-
-//Define libraries here
 #include <Losant.h>
+#include <VL53L0X.h>
 #include <WiFiClientSecure.h>
-
-/**
- * Example that connects an ESP32 based board to the Losant
- * IoT platform. This example reports state to Losant whenever a button is
- * pressed. It also listens for the "toggle" command to turn the LED on and off.
- *
- * This example assumes the following connections:
- * Button connected to pin 14.
- * LED connected to pin 12.
- *
- * Copyright (c) 2022 Losant. All rights reserved.
- * http://losant.com
- * https://github.com/Losant/losant-mqtt-arduino
- * https://github.com/256dpi/arduino-mqtt
- */
+#include <Wire.h>
  
-// WiFi credentials.
-// FILL THESE OUT EVERYTIME FOR YOUR OWN ROUTER
-const char* WIFI_SSID = "Routers of Rohan";
-const char* WIFI_PASS = "KektusKaktus";
+const char* WIFI_SSID = "bleep bleep";
+const char* WIFI_PASS = "boop boop";
 
-// Losant credentials.
 const char* LOSANT_DEVICE_ID = "642bf287cadb126de7dac2b0";
 const char* LOSANT_ACCESS_KEY = "404452c2-8f98-442f-a0ad-bf3dba89a057";
-const char* LOSANT_ACCESS_SECRET = "70f854d66928f30305f681b43105670665ab56400c7642a88675c6931b8881d9";
+const char* LOSANT_ACCESS_SECRET = \
+  "70f854d66928f30305f681b43105670665ab56400c7642a88675c6931b8881d9";
 
-// DigiCert Global Root CA  https://www.digicert.com/kb/digicert-root-certificates.htm https://forums.losant.com/t/solved-losant-brokers-mosquitto-dependent-on-losant-losantrootca-crt-are-all-unable-to-connect-to-losant/1801/2
+// DigiCert Global Root CA
+// https://www.digicert.com/kb/digicert-root-certificates.htm
+// https://forums.losant.com/t/solved-losant-brokers-mosquitto-dependent-on-losant-losantrootca-crt-are-all-unable-to-connect-to-losant/1801/2
 const char* rootCABuff = \
 "-----BEGIN CERTIFICATE-----\n" \
 "MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n" \
@@ -53,33 +38,45 @@ const char* rootCABuff = \
 "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n" \
 "-----END CERTIFICATE-----\n";
 
+VL53L0X sensor;
+
 // initiate the the wifi client
 WiFiClientSecure wifiClient;
 LosantDevice device(LOSANT_DEVICE_ID);
 
-//Define global variables here
-int valueFromFunction = 10000; // global variable
-
 void setup() {
-  // put your setup code here, to run once:
-  
-  Serial.begin(115200); // Needed for serial print with serial monitor. Data rate is set to 115200 bits per second (baud)
-  delay(10); // delay of 10 microseconds
+
+  Serial.begin(115200);
+  Wire.begin();
+
+  delay(10);
+
   Serial.println("");
   Serial.print("Application started");
   Serial.println("");
+
   connect();
+
+  sensor.setTimeout(500);
+
+  if (!sensor.init())
+  {
+    Serial.println("Failed to detect and initialize sensor!");
+    while (1) {}
+  }
+
+  sensor.setMeasurementTimingBudget(200000);
+
 }
 
-// function that connects to Losant platform
 void connect() {
-  // Connect to Wifi.
-  Serial.println();
+
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
 
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+
   wifiClient.setCACert(rootCABuff);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -98,7 +95,7 @@ void connect() {
 
   device.connectSecure(wifiClient, LOSANT_ACCESS_KEY, LOSANT_ACCESS_SECRET);
 
-  while(!device.connected()) {
+  while (!device.connected()) {
     delay(500);
     Serial.print(".");
   }
@@ -107,34 +104,26 @@ void connect() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  int laserDist = laserSensor(100, 2000);  // calls a function defined in another tab
-  delay(5000);
 
-  int ultrasonicDist = ultrasonicSensor();  // calls a function defined in another tab
-  Serial.print("valueFromFunction is: ");
-  Serial.println(valueFromFunction);
-  Serial.println("");
+  int laserDistance = sensor.readRangeSingleMillimeters();
+
+  if (sensor.timeoutOccurred()) {
+    Serial.print("Laser sensor timed out.");
+    return;
+    }
+
+  delay(1000);
+
+  int ultrasonicDistance = ultrasonicSensor();
   
-  delay(5000);
-   bool toReconnect = false;
+  delay(1000);
 
-  if(WiFi.status() != WL_CONNECTED) {
-    Serial.println("Disconnected from WiFi");
-    toReconnect = true;
-  }
-
-  if(!device.connected()) {
-    Serial.println("Disconnected from Losant");
-    toReconnect = true;
-  }
-
-  if(toReconnect) {
+  if ((WiFi.status() != WL_CONNECTED) || !device.connected()) {
+    Serial.println("Disconnected.");
     connect();
   }
-  if(device.connected()){
-    sendData(laserDist, ultrasonicDist);
-  }
+
+  sendData(laserDistance, ultrasonicDistance);
   
   device.loop(); // Keep Losant and WiFi connection alive
   
